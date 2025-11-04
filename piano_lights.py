@@ -5,8 +5,13 @@ Controls 8-channel relay board via Raspberry Pi GPIO pins based on MIDI input fr
 """
 
 import time
+import os
 import threading
 from typing import Dict, Set
+
+# Disable audio to avoid ALSA errors
+os.environ['SDL_AUDIODRIVER'] = 'dummy'
+
 import pygame.midi
 import RPi.GPIO as GPIO
 
