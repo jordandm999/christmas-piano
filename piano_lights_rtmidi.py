@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 """
-Christmas Piano Lights Controller
+Christmas Piano Lights Controller (RTMidi version)
 Controls 8-channel relay board via Raspberry Pi GPIO pins based on MIDI input from piano.
 """
 
 import time
-import os
-import threading
-from typing import Dict, Set
-
-# Disable audio to avoid ALSA errors
-os.environ['SDL_AUDIODRIVER'] = 'dummy'
-
-import pygame.midi
+from typing import Set
+import rtmidi
 import RPi.GPIO as GPIO
 
 class PianoLightsController:
     def __init__(self):
-        # GPIO pins for 8-channel relay board (adjust based on your wiring)
+        # GPIO pins for 8-channel relay board
         self.relay_pins = [18, 19, 20, 21, 22, 23, 24, 25]
 
         # Setup note-to-relay mapping
@@ -35,23 +29,9 @@ class PianoLightsController:
 
     def setup_note_mapping(self):
         """Setup mapping from MIDI notes to relay channels."""
-        # Choose your mapping strategy:
-
-        # STRATEGY 1: Octave Groups (recommended for 88 keys)
-        # Each relay controls roughly 11 keys (88 keys / 8 relays)
-        # A0(21) to C8(108) = 88 keys total
         self.note_to_relay = {}
 
-        # Octave-based mapping:
-        # Relay 0: A0-A#1   (notes 21-34)  - 14 keys
-        # Relay 1: B1-B2    (notes 35-47)  - 13 keys
-        # Relay 2: C3-B3    (notes 48-59)  - 12 keys
-        # Relay 3: C4-B4    (notes 60-71)  - 12 keys (middle octave)
-        # Relay 4: C5-B5    (notes 72-83)  - 12 keys
-        # Relay 5: C6-B6    (notes 84-95)  - 12 keys
-        # Relay 6: C7-B7    (notes 96-107) - 12 keys
-        # Relay 7: C8       (note 108)     - 1 key
-
+        # Octave-based mapping for 88-key piano
         octave_ranges = [
             (21, 34),   # A0-A#1 -> Relay 0
             (35, 47),   # B1-B2  -> Relay 1
@@ -69,26 +49,6 @@ class PianoLightsController:
 
         print(f"Octave mapping loaded: {len(self.note_to_relay)} keys mapped to 8 relays")
 
-        # ALTERNATIVE STRATEGIES (uncomment to use):
-
-        # STRATEGY 2: Equal key groups (11 keys per relay)
-        # self.note_to_relay = {}
-        # keys_per_relay = 11
-        # for note in range(21, 109):  # A0 to C8
-        #     relay_channel = min((note - 21) // keys_per_relay, 7)
-        #     self.note_to_relay[note] = relay_channel
-
-        # STRATEGY 3: White keys only (7 relays for C-B, 1 for all black keys)
-        # white_key_pattern = [0, 2, 4, 5, 7, 9, 11]  # C, D, E, F, G, A, B
-        # self.note_to_relay = {}
-        # for note in range(21, 109):
-        #     note_in_octave = note % 12
-        #     if note_in_octave in white_key_pattern:
-        #         relay_channel = white_key_pattern.index(note_in_octave)
-        #     else:
-        #         relay_channel = 7  # All black keys -> Relay 7
-        #     self.note_to_relay[note] = relay_channel
-
     def setup_gpio(self):
         """Initialize GPIO pins for relay control."""
         GPIO.setmode(GPIO.BCM)
@@ -102,32 +62,53 @@ class PianoLightsController:
         print(f"GPIO initialized for pins: {self.relay_pins}")
 
     def setup_midi(self):
-        """Initialize MIDI input."""
-        # Initialize pygame without audio
-        import pygame
-        pygame.mixer.pre_init(frequency=22050, size=-16, channels=2, buffer=512)
-        pygame.mixer.quit()
-        pygame.midi.init()
+        """Initialize MIDI input using RTMidi."""
+        self.midi_input = rtmidi.MidiIn()
 
-        # List available MIDI devices
-        print("Available MIDI devices:")
-        for i in range(pygame.midi.get_count()):
-            info = pygame.midi.get_device_info(i)
-            print(f"  {i}: {info[1].decode()} - {'Input' if info[2] else 'Output'}")
+        # List available MIDI ports
+        available_ports = self.midi_input.get_ports()
+        print("Available MIDI ports:")
+        for i, port in enumerate(available_ports):
+            print(f"  {i}: {port}")
 
-        # Find first MIDI input device
-        midi_input_id = None
-        for i in range(pygame.midi.get_count()):
-            info = pygame.midi.get_device_info(i)
-            if info[2]:  # is input
-                midi_input_id = i
+        if not available_ports:
+            raise Exception("No MIDI input ports found!")
+
+        # Find Casio port or use first available
+        casio_port = None
+        for i, port in enumerate(available_ports):
+            if 'casio' in port.lower() or 'ctk' in port.lower():
+                casio_port = i
                 break
 
-        if midi_input_id is None:
-            raise Exception("No MIDI input device found!")
+        if casio_port is not None:
+            self.midi_input.open_port(casio_port)
+            print(f"Connected to MIDI port: {available_ports[casio_port]}")
+        else:
+            # Use first available port
+            self.midi_input.open_port(0)
+            print(f"Connected to MIDI port: {available_ports[0]}")
 
-        self.midi_input = pygame.midi.Input(midi_input_id)
-        print(f"MIDI input initialized: {pygame.midi.get_device_info(midi_input_id)[1].decode()}")
+        # Set callback for MIDI messages
+        self.midi_input.set_callback(self.midi_callback)
+
+    def midi_callback(self, event, data=None):
+        """Handle incoming MIDI messages."""
+        message, deltatime = event
+
+        if len(message) >= 3:
+            status = message[0]
+            note = message[1]
+            velocity = message[2]
+
+            # Note On (0x90-0x9F) or Note Off (0x80-0x8F)
+            if 0x80 <= status <= 0x8F:  # Note Off
+                self.handle_note_off(note)
+            elif 0x90 <= status <= 0x9F:  # Note On
+                if velocity == 0:  # Note On with velocity 0 = Note Off
+                    self.handle_note_off(note)
+                else:
+                    self.handle_note_on(note, velocity)
 
     def set_relay(self, relay_channel: int, state: bool):
         """Control a specific relay channel."""
@@ -153,26 +134,6 @@ class PianoLightsController:
             self.set_relay(relay_channel, False)
             print(f"Note OFF: {note} -> Relay {relay_channel + 1}")
 
-    def process_midi_events(self):
-        """Process incoming MIDI events."""
-        if self.midi_input.poll():
-            midi_events = self.midi_input.read(10)
-
-            for event in midi_events:
-                data = event[0]
-                status = data[0]
-                note = data[1]
-                velocity = data[2] if len(data) > 2 else 0
-
-                # Note On (0x90-0x9F) or Note Off (0x80-0x8F)
-                if 0x80 <= status <= 0x8F:  # Note Off
-                    self.handle_note_off(note)
-                elif 0x90 <= status <= 0x9F:  # Note On
-                    if velocity == 0:  # Note On with velocity 0 = Note Off
-                        self.handle_note_off(note)
-                    else:
-                        self.handle_note_on(note, velocity)
-
     def run(self):
         """Main event loop."""
         self.running = True
@@ -181,8 +142,7 @@ class PianoLightsController:
 
         try:
             while self.running:
-                self.process_midi_events()
-                time.sleep(0.001)  # Small delay to prevent excessive CPU usage
+                time.sleep(0.1)  # Keep the program running
 
         except KeyboardInterrupt:
             print("\nShutting down...")
@@ -203,8 +163,7 @@ class PianoLightsController:
 
         # Close MIDI
         if self.midi_input:
-            self.midi_input.close()
-        pygame.midi.quit()
+            self.midi_input.close_port()
 
         print("Cleanup complete.")
 
@@ -216,7 +175,6 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         GPIO.cleanup()
-        pygame.midi.quit()
 
 if __name__ == "__main__":
     main()
