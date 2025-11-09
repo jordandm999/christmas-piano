@@ -31,16 +31,16 @@ class PianoLightsController:
         """Setup mapping from MIDI notes to relay channels."""
         self.note_to_relay = {}
 
-        # 7-relay mapping focusing on most-used keys (43-78)
+        # 7-relay mapping focusing on most-used keys (43-70)
         # Relays 0 and 6 handle leftover low/high keys plus their main range
         octave_ranges = [
-            (21, 48, 0),   # A0-C3 (bass + leftovers) -> Relay 0 (28 keys)
-            (49, 54, 1),   # C#3-F#3 -> Relay 1 (6 keys)
-            (55, 60, 2),   # G3-C4 -> Relay 2 (6 keys)
-            (61, 66, 3),   # C#4-F#4 (Middle C region) -> Relay 3 (6 keys)
-            (67, 72, 4),   # G4-C5 -> Relay 4 (6 keys)
-            (73, 78, 5),   # C#5-F#5 -> Relay 5 (6 keys)
-            (79, 108, 6),  # G5-C8 (treble + leftovers) -> Relay 6 (30 keys)
+            (21, 46, 0),   # A0-A#2 (bass leftovers + main) -> Relay 0 (26 keys)
+            (47, 50, 1),   # B2-D3 -> Relay 1 (4 keys)
+            (51, 54, 2),   # D#3-F#3 -> Relay 2 (4 keys)
+            (55, 58, 3),   # G3-A#3 -> Relay 3 (4 keys)
+            (59, 62, 4),   # B3-D4 (Middle C region) -> Relay 4 (4 keys)
+            (63, 66, 5),   # D#4-F#4 -> Relay 5 (4 keys)
+            (67, 108, 6),  # G4-C8 (main + treble leftovers) -> Relay 6 (42 keys)
         ]
 
         for start_note, end_note, relay_channel in octave_ranges:
