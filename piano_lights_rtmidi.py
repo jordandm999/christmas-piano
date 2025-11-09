@@ -11,8 +11,8 @@ import RPi.GPIO as GPIO
 
 class PianoLightsController:
     def __init__(self):
-        # GPIO pins for 8-channel relay board
-        self.relay_pins = [18, 19, 20, 21, 22, 23, 24, 25]
+        # GPIO pins for 7-channel relay board (only using first 7)
+        self.relay_pins = [18, 19, 20, 21, 22, 23, 24]
 
         # Setup note-to-relay mapping
         self.setup_note_mapping()
@@ -31,24 +31,23 @@ class PianoLightsController:
         """Setup mapping from MIDI notes to relay channels."""
         self.note_to_relay = {}
 
-        # Music-focused mapping - more relays for commonly used notes
-        # Distribution based on typical music usage patterns
+        # 7-relay mapping focusing on most-used keys (43-78)
+        # Relays 0 and 6 handle leftover low/high keys plus their main range
         octave_ranges = [
-            (21, 47),   # A0-B2 (bass) -> Relay 0 (27 keys)
-            (48, 53),   # C3-F3 -> Relay 1 (6 keys)
-            (54, 59),   # F#3-B3 -> Relay 2 (6 keys)
-            (60, 65),   # C4-F4 (Middle C region) -> Relay 3 (6 keys)
-            (66, 71),   # F#4-B4 -> Relay 4 (6 keys)
-            (72, 77),   # C5-F5 -> Relay 5 (6 keys)
-            (78, 83),   # F#5-B5 -> Relay 6 (6 keys)
-            (84, 108),  # C6-C8 (treble) -> Relay 7 (25 keys)
+            (21, 48, 0),   # A0-C3 (bass + leftovers) -> Relay 0 (28 keys)
+            (49, 54, 1),   # C#3-F#3 -> Relay 1 (6 keys)
+            (55, 60, 2),   # G3-C4 -> Relay 2 (6 keys)
+            (61, 66, 3),   # C#4-F#4 (Middle C region) -> Relay 3 (6 keys)
+            (67, 72, 4),   # G4-C5 -> Relay 4 (6 keys)
+            (73, 78, 5),   # C#5-F#5 -> Relay 5 (6 keys)
+            (79, 108, 6),  # G5-C8 (treble + leftovers) -> Relay 6 (30 keys)
         ]
 
-        for relay_channel, (start_note, end_note) in enumerate(octave_ranges):
+        for start_note, end_note, relay_channel in octave_ranges:
             for note in range(start_note, end_note + 1):
                 self.note_to_relay[note] = relay_channel
 
-        print(f"Octave mapping loaded: {len(self.note_to_relay)} keys mapped to 8 relays")
+        print(f"Octave mapping loaded: {len(self.note_to_relay)} keys mapped to 7 relays")
 
     def setup_gpio(self):
         """Initialize GPIO pins for relay control."""
