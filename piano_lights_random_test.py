@@ -129,33 +129,31 @@ class ChristmasLightsController:
         Sequence 1: Randomly flicker lights by groups.
         Groups: [18, 19], [20, 21], [22, 23, 24]
         Always keeps one pin from each group active, switching every 2 seconds.
+        Runs for exactly 7 iterations.
         """
         logger.info("=== STARTING SEQUENCE 1: Random Group Flicker ===")
+        logger.info("Will run 7 iterations (7 different pin combinations)")
 
         # Initial random selection from each group
         current_pins = [random.choice(group) for group in self.groups]
-        logger.info(f"Initial pins selected: {current_pins}")
+        logger.info(f"Iteration 1/7: Pins selected: {current_pins}")
 
         # Turn on initial pins
         self.set_multiple_pins(current_pins, True)
+        time.sleep(2)  # Keep pins on for 2 seconds
 
-        # Run for random duration (let's say between 10-20 seconds for testing)
-        duration = random.randint(10, 20)  # Shorter for testing
-        end_time = time.time() + duration
-        logger.info(f"Sequence 1 will run for {duration} seconds")
-
-        while time.time() < end_time and self.is_active_time():
-            time.sleep(2)  # Keep pins on for 2 seconds
-
+        # Do 6 more iterations (we already did the first one)
+        for iteration in range(2, 8):
             # Select new random pins from each group
             new_pins = [random.choice(group) for group in self.groups]
-            logger.info(f"Switching from {current_pins} to {new_pins}")
+            logger.info(f"Iteration {iteration}/7: Switching from {current_pins} to {new_pins}")
 
             # Turn off old pins and turn on new pins simultaneously
             self.set_multiple_pins(current_pins, False)
             self.set_multiple_pins(new_pins, True)
 
             current_pins = new_pins
+            time.sleep(2)  # Keep pins on for 2 seconds
 
         # Clean up - turn off current pins
         self.set_multiple_pins(current_pins, False)
@@ -255,10 +253,6 @@ class ChristmasLightsController:
 
                 # Run a random sequence
                 self.run_random_sequence()
-
-                # Small pause between sequences
-                logger.info("Waiting 3 seconds before next sequence...\n")
-                time.sleep(3)
 
         except KeyboardInterrupt:
             logger.info("\nShutdown requested by user...")
